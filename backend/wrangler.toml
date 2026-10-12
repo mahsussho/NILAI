@@ -1,0 +1,8 @@
+name = "nilai-siswa-api"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nilai-siswa"
+database_id = "ISI_SETELAH_wrangler_d1_create"
