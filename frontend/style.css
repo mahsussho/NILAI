@@ -17,3 +17,4 @@ td.l,th.l{text-align:left}td input.n{width:58px;text-align:center;padding:6px}
 td.r{font-weight:700;color:var(--p)}.m{color:var(--m);font-size:13px}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:8px 16px;border-radius:20px;opacity:0;transition:.3s;pointer-events:none}
 #toast.s{opacity:1}@media print{header,.row,#toast{display:none}}
+#sync{float:right;font-size:12px;font-weight:400;opacity:.9}.err{color:var(--bad)}.ok{color:var(--p)}
