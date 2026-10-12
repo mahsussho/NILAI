@@ -51,31 +51,22 @@ async function route(req, env) {
     return J({ ok: true });
   }
 
-  // Tahun ajaran baru: hanya membuat tahun kosong. Boleh tahun apa saja (juga tahun-tahun lama).
+  // Tahun ajaran baru. Jika tahun TEPAT sebelumnya ada (mis. 2026/2027 untuk 2027/2028): siswanya disalin dan
+  // dinaikkan (kelas 1-5 +1, kelas 6 -> Lulus, nilai tidak ikut). Jika tidak ada: dibuat kosong (aman untuk tahun-tahun lama).
   if (m === 'POST' && p === '/api/years') {
     const { id } = await body();
     if (!/^\d{4}\/\d{4}$/.test(id || '')) throw bad('Format tahun ajaran: 2022/2023');
     if (await db.prepare('SELECT 1 FROM years WHERE id=?').bind(id).first()) throw bad('Tahun ajaran sudah ada', 409);
-    await db.prepare('INSERT INTO years(id) VALUES(?)').bind(id).run();
-    return J({ ok: true });
-  }
-
-  // Kenaikan kelas (tombol terpisah): salin siswa dari tahun asal ke tahun tujuan, kelas +1, 6 -> Lulus.
-  // Tahun tujuan dibuat bila belum ada. Siswa yang sudah terdaftar di tahun tujuan tidak diubah.
-  if (m === 'POST' && p === '/api/promote') {
-    const { from, to } = await body();
-    if (!/^\d{4}\/\d{4}$/.test(to || '')) throw bad('Format tahun ajaran tujuan: 2022/2023');
-    if (from === to) throw bad('Tahun asal dan tujuan tidak boleh sama');
-    if (!(await db.prepare('SELECT 1 FROM years WHERE id=?').bind(from).first())) throw bad('Tahun asal tidak ditemukan', 404);
-    const c = await db.prepare(`SELECT COUNT(*) AS n, SUM(kelas = '6') AS g, SUM(student_id IN (SELECT student_id FROM enrollments WHERE year_id = ?2)) AS dup
-      FROM enrollments WHERE year_id = ?1 AND kelas <> 'Lulus'`).bind(from, to).first();
-    await db.batch([
-      db.prepare('INSERT OR IGNORE INTO years(id) VALUES(?)').bind(to),
-      db.prepare(`INSERT OR IGNORE INTO enrollments(year_id, student_id, kelas)
-        SELECT ?1, student_id, CASE kelas WHEN '6' THEN 'Lulus' ELSE CAST(CAST(kelas AS INTEGER) + 1 AS TEXT) END
-        FROM enrollments WHERE year_id = ?2 AND kelas <> 'Lulus'`).bind(to, from)
-    ]);
-    return J({ ok: true, total: c.n, graduated: c.g || 0, skipped: c.dup || 0 });
+    const [a, c] = id.split('/').map(Number), prev = `${a - 1}/${c - 1}`;
+    const has = await db.prepare('SELECT 1 FROM years WHERE id=?').bind(prev).first();
+    const st = [db.prepare('INSERT INTO years(id) VALUES(?)').bind(id)];
+    if (has) st.push(db.prepare(`INSERT INTO enrollments(year_id, student_id, kelas)
+      SELECT ?1, student_id, CASE kelas WHEN '6' THEN 'Lulus' ELSE CAST(CAST(kelas AS INTEGER) + 1 AS TEXT) END
+      FROM enrollments WHERE year_id = ?2 AND kelas <> 'Lulus'`).bind(id, prev));
+    await db.batch(st);
+    let n = 0, g = 0;
+    if (has) { const r = await db.prepare(`SELECT COUNT(*) AS n, SUM(kelas = '6') AS g FROM enrollments WHERE year_id = ? AND kelas <> 'Lulus'`).bind(prev).first(); n = r.n; g = r.g || 0; }
+    return J({ ok: true, from: has ? prev : null, copied: n, graduated: g });
   }
 
   // Impor / tambah siswa: cocokkan dengan NISN (atau nama bila NISN kosong), lalu upsert.

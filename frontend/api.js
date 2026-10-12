@@ -12,7 +12,6 @@ export const api = {
   saveSettings: s => call('PUT', '/settings', s),
   newYear: id => call('POST', '/years', { id }),
   importStudents: (year, rows) => call('POST', '/import', { year, rows }),
-  promote: (from, to) => call('POST', '/promote', { from, to }),
   updateStudent: s => call('PUT', '/student', s),
   moveStudent: (year, student, kelas) => call('PATCH', '/enrollment', { year, student, kelas }),
   removeStudent: (year, student) => call('DELETE', `/enrollment?year=${encodeURIComponent(year)}&student=${encodeURIComponent(student)}`),

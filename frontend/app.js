@@ -1,6 +1,6 @@
 import { api } from './api.js';
 import { API_BASE } from './config.js';
-import { parseFile, loadX, TEMPLATE } from './importer.js';
+import { parseFile, loadX } from './importer.js';
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 const $ = s => document.querySelector(s);
@@ -31,7 +31,6 @@ const kNum = k => k === 'Lulus' ? 7 : +k;
 const byKelasNama = (a, b) => kNum(a.kelas) - kNum(b.kelas) || a.name.localeCompare(b.name);
 const toast = m => { const t = $('#toast'); t.textContent = m; t.style.opacity = 1; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.opacity = 0, 2800); };
 const nextYear = id => id ? `${+id.split('/')[0] + 1}/${+id.split('/')[1] + 1}` : '';
-const prevYear = id => id ? `${+id.split('/')[0] - 1}/${+id.split('/')[1] - 1}` : '';
 
 let pending = 0, lastErr = '';function track(p) { pending++; return p.then(() => { pending--; lastErr = ''; }, e => { pending--; lastErr = e.message; toast('Gagal menyimpan: ' + e.message); }); }
 async function act(fn) { try { await fn(); } catch (e) { toast(e.message); } }
@@ -48,12 +47,11 @@ async function reload() { S = await api.load(); renderAll(); }
 // ---------- kerangka ----------
 function renderHeader() {
   $('#app-title').textContent = 'ARSIP NILAI ' + S.settings.mapel.toUpperCase();
-  $('#ta').innerHTML = years().map(y => `<option value="${y.id}" class="text-slate-800" ${y.id === ui.year ? 'selected' : ''}>${y.id}</option>`).join('') || '<option class="text-slate-800">—</option>';
-  $('#smt').value = ui.sem;
+  $('#ta').innerHTML = years().map(y => `<option value="${y.id}" class="text-slate-800" ${y.id === ui.year ? 'selected' : ''}>${y.id}</option>`).join('') + '<option value="__new" class="text-slate-800">＋ Tahun ajaran baru…</option>';
 }
 function renderTabs() {
   const n = cur()?.students.length ?? 0, on = 'bg-emerald-700 text-white shadow-sm', off = 'text-emerald-200 hover:text-white hover:bg-emerald-800/60';
-  $('#tabs').innerHTML = `<button data-tab="siswa" class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${ui.tab === 'siswa' ? on : off}"><span>👥</span> Data Siswa (Master) <span class="px-1.5 rounded-full bg-emerald-900/80 text-[11px] font-mono">${n}</span></button>
+  $('#tabs').innerHTML = `<button data-tab="siswa" class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${ui.tab === 'siswa' ? on : off}"><span>👥</span> Data Siswa <span class="px-1.5 rounded-full bg-emerald-900/80 text-[11px] font-mono">${n}</span></button>
   <div class="h-6 w-px bg-white/20 self-center mx-1"></div>
   ${KELAS.map(k => `<button data-tab="${k}" class="px-3.5 py-2 rounded-lg transition-all ${ui.tab === k ? on : off}">Kelas ${k}</button>`).join('')}
   <div class="h-6 w-px bg-white/20 self-center mx-1"></div>
@@ -64,7 +62,7 @@ function renderAll() {
   renderHeader(); renderTabs();
   if (!S.years.length) {
     $('#main').innerHTML = `<div class="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-sm"><span class="text-4xl block mb-2">🗓️</span>
-    <p class="font-bold text-slate-800">Belum ada tahun ajaran</p><p class="text-sm text-slate-500 mb-4">Buat tahun ajaran dulu (boleh tahun lama), lalu impor siswa.</p>
+    <p class="font-bold text-slate-800">Belum ada tahun ajaran</p><p class="text-sm text-slate-500 mb-4">Buat tahun ajaran dulu (boleh tahun lama), lalu Import Siswa.</p>
     <button data-act="new-year" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 py-2 rounded-lg">+ Buat Tahun Ajaran</button></div>`; return;
   }
   ({ siswa: viewSiswa, arsip: viewArsip }[ui.tab] || (() => viewKelas(ui.tab)))();
@@ -82,10 +80,10 @@ const kelasOpts = (sel, all, lulus) => `${all ? `<option value="ALL" ${sel === '
 function viewSiswa() {
   $('#main').innerHTML = `<section class="space-y-5">
   <div class="${CARD} p-4 flex flex-wrap items-center justify-between gap-3">
-    <div><h2 class="text-lg font-bold flex items-center gap-2"><span>📚</span> Master Data Siswa — T.A ${esc(ui.year)}</h2>
-    <p class="text-xs text-slate-500 mt-0.5">Impor satu file Excel/CSV (boleh multi-sheet "KELAS 1" … "KELAS 6") atau tambah manual. Siswa dengan NISN sama diperbarui, bukan digandakan.</p></div>
+    <div><h2 class="text-lg font-bold flex items-center gap-2"><span>📚</span> Data Siswa — T.A ${esc(ui.year)}</h2>
+    <p class="text-xs text-slate-500 mt-0.5">Isi template Excel lalu klik Import Siswa, atau tambah manual. Siswa dengan NISN sama diperbarui, bukan digandakan.</p></div>
     <div class="flex flex-wrap items-center gap-2.5">
-      <button data-act="import" class="${B_PRI}"><span>📥</span> Impor Excel (Semua Kelas)</button>
+      <button data-act="import" class="${B_PRI}"><span>📥</span> Import Siswa</button>
       <button data-act="tpl" class="${B_SEC}"><span>📄</span> Unduh Template</button>
       <button data-act="add" class="${B_SEC}">+ Tambah Siswa</button></div></div>
   <div class="${CARD} p-3 flex flex-wrap items-center justify-between gap-3">
@@ -110,7 +108,7 @@ function rowsSiswa() {
     <td class="py-2.5 px-4 font-semibold text-slate-800">${esc(s.name)}</td>
     <td class="py-2.5 px-3 text-center font-medium">${s.jk || '-'}</td>
     <td class="py-2.5 px-3 text-center space-x-1"><button data-act="edit" data-id="${s.id}" class="p-1 text-slate-500 hover:text-emerald-700" title="Edit">✏️</button><button data-act="del" data-id="${s.id}" class="p-1 text-slate-500 hover:text-rose-600" title="Hapus">🗑️</button></td></tr>`).join('')
-    : `<tr><td colspan="6" class="text-center py-10 text-slate-400"><span class="text-3xl block mb-2">📂</span>Tidak ada data siswa. Klik "Impor Excel" atau "+ Tambah Siswa".</td></tr>`;
+    : `<tr><td colspan="6" class="text-center py-10 text-slate-400"><span class="text-3xl block mb-2">📂</span>Tidak ada data siswa. Klik "Import Siswa" atau "+ Tambah Siswa".</td></tr>`;
 }
 
 // ---------- Tab: Lembar Nilai Kelas ----------
@@ -120,7 +118,8 @@ function viewKelas(k) {
   $('#main').innerHTML = `<section class="space-y-5">
   <div class="${CARD} p-4 flex flex-wrap items-center justify-between gap-3">
     <div><div class="flex items-center gap-3"><h2 class="text-lg font-bold">Lembar Penilaian - Kelas ${k}</h2>
-      <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">T.A ${esc(ui.year)} • Semester ${ui.sem}</span></div>
+      <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">T.A ${esc(ui.year)}</span>
+      <select id="smt" class="border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold bg-white"><option value="1" ${ui.sem == 1 ? 'selected' : ''}>Semester 1 (Ganjil)</option><option value="2" ${ui.sem == 2 ? 'selected' : ''}>Semester 2 (Genap)</option></select></div>
     <p class="text-xs text-slate-500 mt-1">Siswa diambil dari <strong>Data Siswa</strong>. Nilai Akhir dan Predikat terhitung otomatis; nilai tersimpan otomatis ke database.</p></div>
     <div class="flex flex-wrap items-center gap-2">
       <button data-act="xl-kelas" class="${B_SEC}"><span>📊</span> Ekspor Excel (XLSX)</button></div></div>
@@ -217,7 +216,7 @@ function mStudent(id) {
 function mImport() {
   const im = ui.imp ??= { name: '', rows: [], def: '' };
   const rows = im.rows.map(r => ({ ...r, k: r.kelas || im.def })), cnt = {}; rows.forEach(r => cnt[r.k || '?'] = (cnt[r.k || '?'] || 0) + 1);
-  modal(`${mHead('Impor Seluruh Data Siswa dari Excel', 'Mendukung file multi-sheet (Sheet "KELAS 1" s.d. "KELAS 6") atau satu sheet dengan kolom Kelas. Target: T.A ' + esc(ui.year))}
+  modal(`${mHead('Import Siswa', 'Gunakan template (kolom NAMA, NISN, JK, KELAS). Target: T.A ' + esc(ui.year))}
   <div class="mt-4 space-y-4"><div id="drop" class="border-2 border-dashed border-emerald-300 bg-emerald-50/50 rounded-xl p-6 text-center">
     <input type="file" id="file" accept=".xlsx,.xls,.csv,.txt" class="hidden"><label for="file" class="cursor-pointer block"><span class="text-4xl block mb-2">📁</span>
     <span class="text-sm font-bold text-emerald-900 block">Pilih Berkas Excel / CSV</span><span class="text-xs text-slate-500 mt-1 block">${esc(im.name || 'Klik untuk menelusuri atau tarik file ke sini')}</span></label></div>
@@ -226,16 +225,7 @@ function mImport() {
     ${cnt['?'] ? `<label class="block font-semibold text-slate-700">Kelas untuk yang kosong <select id="def" class="border border-slate-300 rounded px-2 py-1 ml-1"><option value="">(lewati)</option>${kelasOpts(im.def)}</select></label>` : ''}
     <div class="pt-2 border-t border-emerald-200 text-[11px] text-slate-600">Contoh: ${rows.slice(0, 5).map(r => esc(r.name)).join(', ')}${rows.length > 5 ? ', …' : ''}</div></div>` : ''}</div>
   ${mFoot('do-import', '🚀 Simpan & Masukkan ke Database')}`);
-}
-function mPromote() {
-  const from = ui.year;
-  modal(`${mHead('Kenaikan Kelas', 'Salin siswa ke tahun ajaran lain dan naikkan kelasnya.')}<div class="mt-4 space-y-3.5">
-  ${field('Dari Tahun Ajaran', `<select id="p-from" class="${INP}">${years().map(y => `<option ${y.id === from ? 'selected' : ''}>${y.id}</option>`).join('')}</select>`)}
-  ${field('Ke Tahun Ajaran (dibuat otomatis bila belum ada)', `<input id="p-to" value="${nextYear(from)}" class="${INP}">`)}
-  <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">Kelas 1→2 … 5→6, <strong>Kelas 6 → Lulus</strong>. Nilai tidak ikut disalin. Siswa yang sudah terdaftar di tahun tujuan tidak diubah, jadi aman dijalankan ulang.</div></div>${mFoot('do-promote', '⬆️ Naikkan Kelas')}`);
-  $('#p-from').onchange = e => $('#p-to').value = nextYear(e.target.value);
-}
-function mSettings() {
+}function mSettings() {
   const st = S.settings;
   modal(`${mHead('Pengaturan Mapel & Bobot', 'Nilai Akhir = (Rerata Bab × bobot Bab + STS × bobot STS + SAS × bobot SAS) / total bobot')}<div class="mt-4 space-y-3.5">
   ${field('Nama Mapel', `<input id="s-mapel" value="${esc(st.mapel)}" class="${INP}">`)}
@@ -248,10 +238,8 @@ document.addEventListener('click', e => {
   if (b.dataset.tab) { ui.tab = b.dataset.tab; return renderAll(); }
   const a = b.dataset.act, y = S?.years.length ? cur() : null, id = b.dataset.id;
   if (a === 'close') return closeModal();
-  if (a === 'new-year') return act(async () => { const v = prompt('ID tahun ajaran baru (contoh 2020/2021):', y ? prevYear(years().at(-1).id) : ''); if (!v) return; await api.newYear(v.trim()); await reload(); ui.year = v.trim(); renderAll(); toast('Tahun ajaran ' + v.trim() + ' dibuat'); });
+  if (a === 'new-year') return createYear();
   if (!y) return;
-  if (a === 'promote') return mPromote();
-  if (a === 'do-promote') return act(async () => { const to = $('#p-to').value.trim(), from = $('#p-from').value; const r = await api.promote(from, to); closeModal(); await reload(); ui.year = to; renderAll(); toast(`Naik kelas selesai: ${r.total - r.skipped} siswa disalin (${r.graduated} lulus)${r.skipped ? ', ' + r.skipped + ' sudah ada' : ''}`); });
   if (a === 'add') return mStudent();
   if (a === 'edit') return mStudent(id);
   if (a === 'save-student') return act(async () => {
@@ -267,9 +255,9 @@ document.addEventListener('click', e => {
     if (!rows.length) throw new Error('Belum ada siswa yang siap diimpor');
     let add = 0, upd = 0, skip = im.rows.length - rows.length;
     for (let i = 0; i < rows.length; i += 300) { const r = await api.importStudents(y.id, rows.slice(i, i + 300)); add += r.added; upd += r.updated; skip += r.skipped; }
-    closeModal(); ui.tab = 'siswa'; ui.mKelas = 'ALL'; await reload(); toast(`Impor selesai: ${add} baru, ${upd} diperbarui${skip ? ', ' + skip + ' dilewati' : ''}`);
+    closeModal(); ui.tab = 'siswa'; ui.mKelas = 'ALL'; await reload(); toast(`Import selesai: ${add} baru, ${upd} diperbarui${skip ? ', ' + skip + ' dilewati' : ''}`);
   });
-  if (a === 'tpl') return dl(new Blob([TEMPLATE], { type: 'text/csv' }), 'template-siswa.csv');
+  if (a === 'tpl') { const l = document.createElement('a'); l.href = 'template-siswa.xlsx'; l.download = 'TEMPLATE_SISWA.xlsx'; l.click(); return; }
   if (a === 'settings') return mSettings();
   if (a === 'save-settings') return act(async () => { const st = { mapel: $('#s-mapel').value.trim() || 'PAI', wBab: +$('#s-wBab').value, wSts: +$('#s-wSts').value, wSas: +$('#s-wSas').value }; if (st.wBab + st.wSts + st.wSas <= 0) throw new Error('Total bobot harus lebih dari 0'); await api.saveSettings(st); S.settings = st; closeModal(); renderAll(); toast('Pengaturan disimpan'); });
   if (a === 'clear') { const s = y.students.find(x => x.id === id); if (!confirm(`Kosongkan nilai ${s.name} (Semester ${ui.sem})?`)) return; (y.scores[id] ??= {})[ui.sem] = Object.fromEntries(FIELDS.map(f => [f, ''])); queueScore(y.id, id, ui.sem, true); return rowsKelas(ui.tab); }
@@ -277,10 +265,20 @@ document.addEventListener('click', e => {
   if (a === 'xl-arsip') return act(() => saveXlsx([['No', 'T.A', 'Smt', 'Kelas', 'NISN', 'Nama', ...H], ...arsipData().map((r, i) => [i + 1, r.ta, r.sm, r.s.kelas, r.s.nisn || '', r.s.name, ...FIELDS.map(f => r.sc[f] ?? ''), r.na ?? '', predOf(r.na)])], 'Arsip', `arsip-nilai-${S.settings.mapel}.xlsx`));
   if (a === 'print') return window.print();
 });
+async function createYear() {
+  const d = new Date(), y0 = d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
+  const sug = S.years.length ? nextYear(years()[0].id) : `${y0}/${y0 + 1}`;
+  const v = (prompt('ID tahun ajaran baru (contoh ' + sug + '):', sug) || '').trim();
+  if (!v) return renderHeader();
+  try {
+    const r = await api.newYear(v); await reload(); ui.year = v; renderAll();
+    toast(r.from ? `T.A ${v} dibuat: ${r.copied} siswa dari ${r.from} naik kelas (${r.graduated} lulus)` : `T.A ${v} dibuat (kosong)`);
+  } catch (e) { toast(e.message); renderHeader(); }
+}
 async function loadFile(f) { if (!f) return; await act(async () => { const rows = await parseFile(f); if (!rows.length) throw new Error('Tidak ada baris siswa di file ini'); ui.imp.name = f.name; ui.imp.rows = rows; mImport(); }); }
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'ta') { ui.year = t.value; return renderAll(); }
+  if (t.id === 'ta') { if (t.value === '__new') return createYear(); ui.year = t.value; return renderAll(); }
   if (t.id === 'smt') { ui.sem = t.value; return renderAll(); }
   if (t.id === 'file') return loadFile(t.files[0]);
   if (t.id === 'def') { ui.imp.def = t.value; return mImport(); }

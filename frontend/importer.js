@@ -42,4 +42,3 @@ export async function parseFile(file) {
   if (!used) throw new Error('Kolom "Nama" tidak ditemukan. Pastikan ada baris judul berisi kolom Nama (serta NISN, Kelas bila ada) di 10 baris pertama.');
   return rows;
 }
-export const TEMPLATE = '\ufeffNama,NISN,Kelas,JK\nAhmad Fauzi,0012345678,3,L\nBinti Aisyah,0012345679,3,P\n';
