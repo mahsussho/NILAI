@@ -1,0 +1,11 @@
+{
+  "name": "nilai",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute nilai-siswa --local --file=backend/schema.sql",
+    "db:remote": "wrangler d1 execute nilai-siswa --remote --file=backend/schema.sql"
+  },
+  "devDependencies": { "wrangler": "^4" }
+}

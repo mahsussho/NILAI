@@ -1,24 +1,24 @@
-# Nilai Siswa (PWA) — Cloudflare Pages + Workers + D1
+# Nilai Siswa (PWA) — satu Cloudflare Worker + D1
 
-## 1. Backend (Worker + D1)
+Struktur: `frontend/` (halaman statis) · `backend/` (kode API + `schema.sql`) · `wrangler.jsonc` di root.
+Satu Worker melayani `frontend/` sebagai aset dan menangani `/api/*` lewat `backend/src/index.js`.
+
+## Setup sekali saja
 ```bash
-cd backend && npm i
+npm install
 npx wrangler login
-npx wrangler d1 create nilai-siswa            # salin database_id ke wrangler.toml
-npx wrangler d1 execute nilai-siswa --remote --file=schema.sql
-npx wrangler deploy                           # catat URL Worker-nya
+npx wrangler d1 create nilai-siswa        # salin database_id ke wrangler.jsonc
+npm run db:remote                         # membuat tabel di D1
 ```
-Uji lokal: `npx wrangler d1 execute nilai-siswa --local --file=schema.sql && npx wrangler dev` (port 8787).
+(Tanpa terminal: buat database `nilai-siswa` di dashboard Cloudflare > D1, tempel isi `backend/schema.sql` di tab Console, lalu isi `database_id` di `wrangler.jsonc`.)
 
-## 2. Frontend (Pages)
-- Edit `frontend/config.js`: ganti `GANTI-DENGAN-URL-WORKER` dengan URL Worker (akhiran `/api`).
-- Lokal: `cd frontend && npx serve .` (otomatis memakai http://localhost:8787/api).
-- Deploy: Cloudflare Pages, build command kosong, output directory `frontend`.
+## Deploy lewat GitHub (Workers Builds)
+Pengaturan di dashboard: Root directory kosong atau `/`, Build command kosong, Deploy command `npx wrangler deploy`. Setiap push ke `main` otomatis deploy.
 
-## Tabel D1
-`students` (master: id, nisn, nama) · `years` · `enrollments` (kelas per tahun) · `scores` (Bab1-5, STS, SAS per semester) · `settings` (mapel & bobot).
+## Uji lokal
+```bash
+npm run db:local
+npm run dev        # buka http://localhost:8787
+```
 
-## Impor siswa
-Tab "Impor Excel": .xlsx/.xls/.csv, kolom Nama / NISN / Kelas dikenali otomatis. Siswa dicocokkan lewat NISN (atau nama bila NISN kosong), jadi impor ulang memperbarui, tidak menggandakan.
-
-⚠️ Belum ada autentikasi: siapa pun yang tahu URL Worker bisa membaca/mengubah data. Tambahkan Cloudflare Access sebelum dipakai dengan data asli.
+⚠️ Belum ada autentikasi: siapa pun yang tahu alamat Worker bisa membaca/mengubah data. Pasang Cloudflare Access sebelum memakai data siswa sungguhan.
