@@ -1,0 +1,21 @@
+{
+  "name": "SIP-PAI SDN 2 Jombok",
+  "short_name": "SIP-PAI",
+  "description": "Sistem Informasi Penilaian PAI - SDN 2 Jombok",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
