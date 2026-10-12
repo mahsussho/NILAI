@@ -18,6 +18,7 @@ export function normKelas(v) {
 }
 const isName = h => /^(nama|nama siswa|nama lengkap|nama peserta didik|siswa|peserta didik)$/.test(h);
 const isNisn = h => h === 'nisn';
+const isJk = h => /^(jk|l\/p|lp|jenis kelamin|gender)$/.test(h);
 const isKelas = h => /^(kelas|kls|rombel|rombongan belajar)$/.test(h);
 
 export async function parseFile(file) {
@@ -29,16 +30,16 @@ export async function parseFile(file) {
     const data = X.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: '' });
     const hi = data.slice(0, 10).findIndex(r => r.some(c => isName(norm(c))));
     if (hi < 0) continue;
-    const h = data[hi].map(norm), cn = h.findIndex(isName), cs = h.findIndex(isNisn), ck = h.findIndex(isKelas);
+    const h = data[hi].map(norm), cn = h.findIndex(isName), cs = h.findIndex(isNisn), ck = h.findIndex(isKelas), cj = h.findIndex(isJk);
     const sheetKelas = (name.match(/(?:kelas|kls)\s*([1-6])/i) || [])[1] || '';
     used++;
     for (const r of data.slice(hi + 1)) {
       const nm = String(r[cn] ?? '').trim().replace(/\s+/g, ' ');
       if (!nm) continue;
-      rows.push({ name: nm, nisn: cs >= 0 ? String(r[cs] ?? '').trim() : '', kelas: (ck >= 0 ? normKelas(r[ck]) : '') || sheetKelas, kelasRaw: ck >= 0 ? String(r[ck] ?? '').trim() : '' });
+      rows.push({ name: nm, jk: cj >= 0 ? String(r[cj] ?? '').trim() : '', nisn: cs >= 0 ? String(r[cs] ?? '').trim() : '', kelas: (ck >= 0 ? normKelas(r[ck]) : '') || sheetKelas, kelasRaw: ck >= 0 ? String(r[ck] ?? '').trim() : '' });
     }
   }
   if (!used) throw new Error('Kolom "Nama" tidak ditemukan. Pastikan ada baris judul berisi kolom Nama (serta NISN, Kelas bila ada) di 10 baris pertama.');
   return rows;
 }
-export const TEMPLATE = '\ufeffNama,NISN,Kelas\nAhmad Fauzi,0012345678,3\nBinti Aisyah,0012345679,3\n';
+export const TEMPLATE = '\ufeffNama,NISN,Kelas,JK\nAhmad Fauzi,0012345678,3,L\nBinti Aisyah,0012345679,3,P\n';

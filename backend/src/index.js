@@ -4,6 +4,9 @@ const F = ['b1', 'b2', 'b3', 'b4', 'b5', 'sts', 'sas'];
 const DEF = { mapel: 'PAI', wBab: 40, wSts: 30, wSas: 30 };
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
 const J = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'Content-Type': 'application/json', ...cors } });
+const cleanName = v => String(v ?? '').trim().replace(/\s+/g, ' ');
+const cleanNisn = v => String(v ?? '').replace(/[^0-9A-Za-z]/g, '') || null;
+const cleanJk = v => { const c = String(v ?? '').trim().toUpperCase()[0]; return c === 'L' || c === 'P' ? c : null; };
 const bad = (m, s = 400) => Object.assign(new Error(m), { status: s });
 
 export default {
@@ -22,7 +25,7 @@ async function route(req, env) {
   if (m === 'GET' && p === '/api/data') {
     const [Y, E, C, T] = await db.batch([
       db.prepare('SELECT id FROM years ORDER BY id'),
-      db.prepare('SELECT s.id, s.nisn, s.name, e.year_id, e.kelas FROM enrollments e JOIN students s ON s.id = e.student_id'),
+      db.prepare('SELECT s.id, s.nisn, s.name, s.jk, e.year_id, e.kelas FROM enrollments e JOIN students s ON s.id = e.student_id'),
       db.prepare('SELECT * FROM scores'),
       db.prepare('SELECT key, value FROM settings')
     ]);
@@ -30,7 +33,7 @@ async function route(req, env) {
     for (const r of T.results) settings[r.key] = r.key === 'mapel' ? r.value : Number(r.value);
     const years = Y.results.map(r => ({ id: r.id, students: [], scores: {} }));
     const ix = Object.fromEntries(years.map(y => [y.id, y]));
-    for (const r of E.results) ix[r.year_id].students.push({ id: r.id, name: r.name, nisn: r.nisn, kelas: r.kelas });
+    for (const r of E.results) ix[r.year_id].students.push({ id: r.id, name: r.name, nisn: r.nisn, jk: r.jk, kelas: r.kelas });
     for (const r of C.results) {
       const y = ix[r.year_id]; if (!y) continue;
       (y.scores[r.student_id] ??= {})[r.semester] = Object.fromEntries(F.map(k => [k, r[k]]));
@@ -48,19 +51,31 @@ async function route(req, env) {
     return J({ ok: true });
   }
 
-  // Tahun ajaran baru: salin siswa dari tahun terakhir + naik kelas (6 -> Lulus), nilai mulai kosong.
+  // Tahun ajaran baru: hanya membuat tahun kosong. Boleh tahun apa saja (juga tahun-tahun lama).
   if (m === 'POST' && p === '/api/years') {
     const { id } = await body();
     if (!/^\d{4}\/\d{4}$/.test(id || '')) throw bad('Format tahun ajaran: 2022/2023');
-    const last = (await db.prepare('SELECT max(id) AS m FROM years').first()).m;
-    if (last && id <= last) throw bad(`Tahun ajaran baru harus setelah ${last}`, 409);
-    const st = [db.prepare('INSERT INTO years(id) VALUES(?)').bind(id)];
-    if (last) st.push(db.prepare(
-      `INSERT INTO enrollments(year_id, student_id, kelas)
-       SELECT ?1, student_id, CASE kelas WHEN '6' THEN 'Lulus' ELSE CAST(CAST(kelas AS INTEGER) + 1 AS TEXT) END
-       FROM enrollments WHERE year_id = ?2 AND kelas <> 'Lulus'`).bind(id, last));
-    await db.batch(st);
-    return J({ ok: true, from: last });
+    if (await db.prepare('SELECT 1 FROM years WHERE id=?').bind(id).first()) throw bad('Tahun ajaran sudah ada', 409);
+    await db.prepare('INSERT INTO years(id) VALUES(?)').bind(id).run();
+    return J({ ok: true });
+  }
+
+  // Kenaikan kelas (tombol terpisah): salin siswa dari tahun asal ke tahun tujuan, kelas +1, 6 -> Lulus.
+  // Tahun tujuan dibuat bila belum ada. Siswa yang sudah terdaftar di tahun tujuan tidak diubah.
+  if (m === 'POST' && p === '/api/promote') {
+    const { from, to } = await body();
+    if (!/^\d{4}\/\d{4}$/.test(to || '')) throw bad('Format tahun ajaran tujuan: 2022/2023');
+    if (from === to) throw bad('Tahun asal dan tujuan tidak boleh sama');
+    if (!(await db.prepare('SELECT 1 FROM years WHERE id=?').bind(from).first())) throw bad('Tahun asal tidak ditemukan', 404);
+    const c = await db.prepare(`SELECT COUNT(*) AS n, SUM(kelas = '6') AS g, SUM(student_id IN (SELECT student_id FROM enrollments WHERE year_id = ?2)) AS dup
+      FROM enrollments WHERE year_id = ?1 AND kelas <> 'Lulus'`).bind(from, to).first();
+    await db.batch([
+      db.prepare('INSERT OR IGNORE INTO years(id) VALUES(?)').bind(to),
+      db.prepare(`INSERT OR IGNORE INTO enrollments(year_id, student_id, kelas)
+        SELECT ?1, student_id, CASE kelas WHEN '6' THEN 'Lulus' ELSE CAST(CAST(kelas AS INTEGER) + 1 AS TEXT) END
+        FROM enrollments WHERE year_id = ?2 AND kelas <> 'Lulus'`).bind(to, from)
+    ]);
+    return J({ ok: true, total: c.n, graduated: c.g || 0, skipped: c.dup || 0 });
   }
 
   // Impor / tambah siswa: cocokkan dengan NISN (atau nama bila NISN kosong), lalu upsert.
@@ -70,13 +85,11 @@ async function route(req, env) {
     if (!(await db.prepare('SELECT 1 FROM years WHERE id=?').bind(b.year).first())) throw bad('Tahun ajaran tidak ditemukan', 404);
     let skipped = 0; const rows = new Map();
     for (const r of b.rows) {
-      const name = String(r.name ?? '').trim().replace(/\s+/g, ' ');
-      const nisn = String(r.nisn ?? '').replace(/[^0-9A-Za-z]/g, '') || null;
-      const kelas = String(r.kelas ?? '').trim();
+      const name = cleanName(r.name), nisn = cleanNisn(r.nisn), jk = cleanJk(r.jk), kelas = String(r.kelas ?? '').trim();
       if (!name || !KELAS.includes(kelas)) { skipped++; continue; }
-      rows.set(nisn || 'n:' + name.toLowerCase(), { name, nisn, kelas });
+      rows.set(nisn || 'n:' + name.toLowerCase(), { name, nisn, kelas, jk });
     }
-    const all = (await db.prepare('SELECT id, nisn, name FROM students').all()).results;
+    const all = (await db.prepare('SELECT id, nisn, name, jk FROM students').all()).results;
     const byN = new Map(all.filter(s => s.nisn).map(s => [s.nisn, s]));
     const byName = new Map(); for (const s of all) { const k = s.name.toLowerCase(); if (!byName.has(k)) byName.set(k, s); }
     const ins = [], upd = [], enr = [], used = new Set();
@@ -85,17 +98,31 @@ async function route(req, env) {
       if (!s) { const c = byName.get(r.name.toLowerCase()); if (c && (!r.nisn || !c.nisn)) s = c; }
       if (s) {
         if (used.has(s.id)) { skipped++; continue; }
-        used.add(s.id); upd.push({ id: s.id, name: r.name, nisn: r.nisn || s.nisn }); enr.push({ id: s.id, kelas: r.kelas });
+        used.add(s.id); upd.push({ id: s.id, name: r.name, nisn: r.nisn || s.nisn, jk: r.jk || s.jk }); enr.push({ id: s.id, kelas: r.kelas });
       } else {
-        const id = crypto.randomUUID(); ins.push({ id, name: r.name, nisn: r.nisn }); enr.push({ id, kelas: r.kelas });
+        const id = crypto.randomUUID(); ins.push({ id, name: r.name, nisn: r.nisn, jk: r.jk }); enr.push({ id, kelas: r.kelas });
       }
     }
     const st = [];
-    if (ins.length) st.push(db.prepare(`INSERT INTO students(id,nisn,name) SELECT json_extract(value,'$.id'), json_extract(value,'$.nisn'), json_extract(value,'$.name') FROM json_each(?)`).bind(JSON.stringify(ins)));
-    if (upd.length) st.push(db.prepare(`UPDATE students SET name = j.name, nisn = j.nisn FROM (SELECT json_extract(value,'$.id') AS id, json_extract(value,'$.name') AS name, json_extract(value,'$.nisn') AS nisn FROM json_each(?)) j WHERE students.id = j.id`).bind(JSON.stringify(upd)));
+    if (ins.length) st.push(db.prepare(`INSERT INTO students(id,nisn,name,jk) SELECT json_extract(value,'$.id'), json_extract(value,'$.nisn'), json_extract(value,'$.name'), json_extract(value,'$.jk') FROM json_each(?)`).bind(JSON.stringify(ins)));
+    if (upd.length) st.push(db.prepare(`UPDATE students SET name = j.name, nisn = j.nisn, jk = j.jk FROM (SELECT json_extract(value,'$.id') AS id, json_extract(value,'$.name') AS name, json_extract(value,'$.nisn') AS nisn, json_extract(value,'$.jk') AS jk FROM json_each(?)) j WHERE students.id = j.id`).bind(JSON.stringify(upd)));
     if (enr.length) st.push(db.prepare(`INSERT INTO enrollments(year_id,student_id,kelas) SELECT ?2, json_extract(value,'$.id'), json_extract(value,'$.kelas') FROM json_each(?1) WHERE true ON CONFLICT(year_id,student_id) DO UPDATE SET kelas = excluded.kelas`).bind(JSON.stringify(enr), b.year));
     if (st.length) await db.batch(st);
     return J({ ok: true, added: ins.length, updated: upd.length, skipped });
+  }
+
+  // Edit satu siswa (nama, NISN, L/P) + kelasnya pada tahun tersebut
+  if (m === 'PUT' && p === '/api/student') {
+    const b = await body(), name = cleanName(b.name);
+    if (!name) throw bad('Nama wajib diisi');
+    if (!KELAS.includes(b.kelas)) throw bad('Kelas tidak valid');
+    try {
+      await db.batch([
+        db.prepare('UPDATE students SET name=?, nisn=?, jk=? WHERE id=?').bind(name, cleanNisn(b.nisn), cleanJk(b.jk), b.id),
+        db.prepare('UPDATE enrollments SET kelas=? WHERE year_id=? AND student_id=?').bind(b.kelas, b.year, b.id)
+      ]);
+    } catch (e) { if (/UNIQUE/i.test(e.message)) throw bad('NISN sudah dipakai siswa lain', 409); throw e; }
+    return J({ ok: true });
   }
 
   if (m === 'PATCH' && p === '/api/enrollment') {

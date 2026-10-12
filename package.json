@@ -5,7 +5,11 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 execute nilai-siswa --local --file=backend/schema.sql",
-    "db:remote": "wrangler d1 execute nilai-siswa --remote --file=backend/schema.sql"
+    "db:remote": "wrangler d1 execute nilai-siswa --remote --file=backend/schema.sql",
+    "css": "tailwindcss -c tailwind.config.js -i styles/tailwind.src.css -o frontend/tailwind.css --minify"
   },
-  "devDependencies": { "wrangler": "^4" }
+  "devDependencies": {
+    "wrangler": "^4",
+    "tailwindcss": "^3.4.17"
+  }
 }

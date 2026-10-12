@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS years (id TEXT PRIMARY KEY CHECK (id GLOB '[0-9][0-9]
 CREATE TABLE IF NOT EXISTS students (
   id   TEXT PRIMARY KEY,
   nisn TEXT UNIQUE,            -- boleh kosong (NULL), tapi unik bila diisi
-  name TEXT NOT NULL
+  name TEXT NOT NULL,
+  jk   TEXT                    -- 'L' / 'P' (opsional)
 );
 CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
 

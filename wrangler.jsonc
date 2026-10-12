@@ -8,6 +8,6 @@
     "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "arsip_digital", "database_id": "2e0c087b-b499-4260-a976-a7723ee7d27e" }
+    { "binding": "DB", "database_name": "nilai-siswa", "database_id": "ISI_DATABASE_ID_DARI_wrangler_d1_create" }
   ]
 }
